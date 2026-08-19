@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,6 +142,20 @@ class LotBoundaryLoggerTests(unittest.TestCase):
         self.assertTrue(Path(last_path()).is_file())
         self.assertIn("LOTBOUNDARY STAGE", Path(last_path()).read_text(encoding="utf-8"))
         self.assertFalse((Path(daily_directory()) / LAST_FILE_NAME).exists())
+
+    def test_reuses_existing_wisvision_date_folder(self):
+        hyphen = Path(self._tmp.name) / datetime.now().strftime("%Y-%m-%d")
+        hyphen.mkdir()
+        (hyphen / "Inspect.txt").write_text("existing\n", encoding="utf-8")
+
+        write("USE EXISTING FOLDER")
+
+        daily = Path(daily_path())
+        self.assertEqual(daily.parent, hyphen)
+        self.assertTrue(daily.is_file())
+        self.assertIn("USE EXISTING FOLDER", daily.read_text(encoding="utf-8"))
+        compact = Path(self._tmp.name) / datetime.now().strftime("%Y%m%d")
+        self.assertFalse(compact.exists())
 
 
 if __name__ == "__main__":

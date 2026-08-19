@@ -15,6 +15,7 @@ from datetime import datetime
 
 LAST_FILE_NAME = "LotBoundary_LAST.txt"
 DATE_FORMAT = "%Y%m%d"
+DATE_FORMATS = ("%Y%m%d", "%Y-%m-%d", "%Y_%m_%d")
 DEFAULT_LOG_ROOT = r"C:\WISVision\Log"
 
 _lock = threading.Lock()
@@ -35,14 +36,24 @@ def last_path() -> str:
     return os.path.join(_log_root, LAST_FILE_NAME)
 
 
+def date_stamp(now: datetime | None = None) -> str:
+    """Reuse the date folder WISVision already created, else yyyyMMdd."""
+    now = now or datetime.now()
+    for fmt in DATE_FORMATS:
+        stamp = now.strftime(fmt)
+        if os.path.isdir(os.path.join(_log_root, stamp)):
+            return stamp
+    return now.strftime(DATE_FORMAT)
+
+
 def daily_directory(now: datetime | None = None) -> str:
     now = now or datetime.now()
-    return os.path.join(_log_root, now.strftime(DATE_FORMAT))
+    return os.path.join(_log_root, date_stamp(now))
 
 
 def daily_path(now: datetime | None = None) -> str:
     now = now or datetime.now()
-    date = now.strftime(DATE_FORMAT)
+    date = date_stamp(now)
     return os.path.join(daily_directory(now), f"LotBoundary_{date}.txt")
 
 

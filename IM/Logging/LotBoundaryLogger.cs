@@ -6,27 +6,40 @@ using System.Threading;
 namespace IM.Logging
 {
     /// <summary>
-    /// LotBoundary 단계 로그를 디스크까지 즉시 Flush 한다.
+    /// LotBoundary 단계 로그. 기존 WISVision 날짜 폴더에 txt 를 남기고, LAST 는 루트에 둔다.
     ///
-    /// C:\WISVision\Log\LotBoundary_LAST.txt          ← 현재 Lot (루트, 날짜 폴더 아님)
-    /// C:\WISVision\Log\{yyyyMMdd}\LotBoundary_{yyyyMMdd}.txt
+    /// 출력 경로
+    ///   C:\WISVision\Log\LotBoundary_LAST.txt
+    ///   C:\WISVision\Log\{날짜}\LotBoundary_{날짜}.txt
     ///
-    /// 폴더는 직접 만들 필요 없다. Write/BeginLot 때 전부 자동 생성한다.
-    ///   C:\WISVision\Log\
-    ///   C:\WISVision\Log\{yyyyMMdd}\
-    /// LAST/날짜 txt 파일도 첫 로그에서 자동 생성한다.
+    /// {날짜} 폴더는 새로 만들지 않고, 이미 있는 WISVision 날짜 폴더를 그대로 쓴다.
+    /// (yyyyMMdd / yyyy-MM-dd / yyyy_MM_dd 중 오늘 폴더가 있으면 그걸 사용)
+    /// 오늘 폴더가 아직 없으면 yyyyMMdd 로 생성한다. 이미 있으면 CreateDirectory 는 no-op.
     ///
-    /// LAST 가 안 보이던 흔한 원인
-    /// 1) LAST 를 날짜 폴더 안에 씀 (루트가 아니라 Log\20260819\LotBoundary_LAST.txt)
-    /// 2) 기존 WISVision 로그는 날짜 폴더에만 쓰고 LAST 파일을 안 만듦
-    /// 3) StreamWriter 를 Lot 시작 때 열고, 끝날 때까지 Flush 안 함 → 파일 0바이트
-    /// 4) Flush() 만 호출하고 FileStream.Flush(true) 를 안 함 → OS 캐시에만 남음
-    /// 5) 공유 잠금(FileShare.None) 때문에 실행 중엔 파일을 못 염
+    /// 출력 기준
+    ///   BeginLot(lotId)  : Lot 시작 때 1줄. LAST 를 현재 Lot 으로 초기화.
+    ///   Write(message)   : 단계마다 1줄. LAST+날짜 txt 둘 다 즉시 Flush(true).
+    ///   EndLot(lot, res) : Lot 종료 때 1줄.
+    ///   한 줄 형식       : [yyyy-MM-dd HH:mm:ss.fff] 메시지
+    ///   LAST             : 현재 Lot 만 (다음 BeginLot 때 비움)
+    ///   날짜 txt         : 그날 모든 Lot append
+    ///
+    /// 기존 코드 수정
+    ///   1) 이 파일을 IM 프로젝트에 추가
+    ///   2) 어제 넣은 LotBoundary 로그(날짜 폴더 LAST, AppendAllText 만 하는 코드) 삭제
+    ///   3) Lot 시작/단계/종료에 BeginLot / Write / EndLot 호출
     /// </summary>
     public static class LotBoundaryLogger
     {
         public const string LastFileName = "LotBoundary_LAST.txt";
         public const string DateFormat = "yyyyMMdd";
+
+        static readonly string[] DateFormats = new string[]
+        {
+            "yyyyMMdd",
+            "yyyy-MM-dd",
+            "yyyy_MM_dd"
+        };
 
         public static string LogRoot = @"C:\WISVision\Log";
 
@@ -39,14 +52,32 @@ namespace IM.Logging
             get { return Path.Combine(LogRoot, LastFileName); }
         }
 
+        /// <summary>
+        /// 오늘 WISVision 이 이미 만든 날짜 폴더 이름을 쓴다.
+        /// 없으면 yyyyMMdd.
+        /// </summary>
+        public static string DateStamp(DateTime now)
+        {
+            int i;
+            for (i = 0; i < DateFormats.Length; i++)
+            {
+                string stamp = now.ToString(DateFormats[i]);
+                if (Directory.Exists(Path.Combine(LogRoot, stamp)))
+                {
+                    return stamp;
+                }
+            }
+            return now.ToString(DateFormat);
+        }
+
         public static string DailyDirectory(DateTime now)
         {
-            return Path.Combine(LogRoot, now.ToString(DateFormat));
+            return Path.Combine(LogRoot, DateStamp(now));
         }
 
         public static string DailyPath(DateTime now)
         {
-            string date = now.ToString(DateFormat);
+            string date = DateStamp(now);
             return Path.Combine(DailyDirectory(now), "LotBoundary_" + date + ".txt");
         }
 
