@@ -2,8 +2,10 @@
 WISVision LotBoundary 로그 현장 적용 메모
 작성: 2026-08-19
 
-※ 이 Cloud Agent에서는 메일을 보낼 수 없습니다.
-   이 메모장 + clsLog.cs 를 USB/공유폴더/GitHub PR로 현장에 가져가면 됩니다.
+※ 이 환경에서는 메일을 보낼 수 없습니다. 아래 zip을 받아 직접 전달하면 됩니다.
+   전달 대상: rmscks104@gmail.com
+   (현장: gckim@ati2000.co.kr)
+   zip: WISVision_LotBoundary_Log.zip
    PR: https://github.com/KIMGEUNCHAN/KGC_Coffee/pull/1
 
 
