@@ -5,6 +5,7 @@ from IM.Logging.lot_boundary_logger import (
     begin_lot,
     daily_path,
     end_lot,
+    ensure_directories,
     last_path,
     reset_for_tests,
     set_log_root,

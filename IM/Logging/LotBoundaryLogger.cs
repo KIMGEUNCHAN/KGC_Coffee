@@ -11,11 +11,17 @@ namespace IM.Logging
     /// C:\WISVision\Log\LotBoundary_LAST.txt          ← 현재 Lot (루트, 날짜 폴더 아님)
     /// C:\WISVision\Log\{yyyyMMdd}\LotBoundary_{yyyyMMdd}.txt
     ///
+    /// 폴더는 직접 만들 필요 없다. Write/BeginLot 때 전부 자동 생성한다.
+    ///   C:\WISVision\Log\
+    ///   C:\WISVision\Log\{yyyyMMdd}\
+    /// LAST/날짜 txt 파일도 첫 로그에서 자동 생성한다.
+    ///
     /// LAST 가 안 보이던 흔한 원인
     /// 1) LAST 를 날짜 폴더 안에 씀 (루트가 아니라 Log\20260819\LotBoundary_LAST.txt)
     /// 2) StreamWriter 를 Lot 시작 때 열고, 끝날 때까지 Flush 안 함 → 파일 0바이트
     /// 3) Flush() 만 호출하고 FileStream.Flush(true) 를 안 함 → OS 캐시에만 남음
     /// 4) 공유 잠금(FileShare.None) 때문에 실행 중엔 파일을 못 염
+    /// 5) CreateDirectory 없이 써서 Log 폴더가 없으면 예외 먹고 파일 자체가 안 생김
     /// </summary>
     public static class LotBoundaryLogger
     {
@@ -42,6 +48,17 @@ namespace IM.Logging
         {
             string date = now.ToString(DateFormat);
             return Path.Combine(DailyDirectory(now), "LotBoundary_" + date + ".txt");
+        }
+
+        /// <summary>
+        /// Log 루트와 오늘 날짜 폴더를 만든다. 이미 있으면 그냥 넘어간다.
+        /// 앱 시작 때 호출하면 탐색기에 폴더가 미리 보인다.
+        /// 호출하지 않아도 Write/BeginLot 가 같은 일을 한다.
+        /// </summary>
+        public static void EnsureDirectories()
+        {
+            Directory.CreateDirectory(LogRoot);
+            Directory.CreateDirectory(DailyDirectory(DateTime.Now));
         }
 
         /// <summary>새 Lot 시작. LAST 를 비우고 헤더를 즉시 기록한다.</summary>
@@ -76,7 +93,7 @@ namespace IM.Logging
 
             CurrentLot.Append(line);
 
-            Directory.CreateDirectory(LogRoot);
+            EnsureDirectories();
             Directory.CreateDirectory(DailyDirectory(now));
 
             // daily: append

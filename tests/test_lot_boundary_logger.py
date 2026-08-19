@@ -14,6 +14,7 @@ from IM.Logging.lot_boundary_logger import (  # noqa: E402
     daily_directory,
     daily_path,
     end_lot,
+    ensure_directories,
     last_path,
     reset_for_tests,
     set_log_root,
@@ -90,6 +91,28 @@ class LotBoundaryLoggerTests(unittest.TestCase):
         write("FLUSH")
         leftovers = list(Path(self._tmp.name).glob("*.tmp"))
         self.assertEqual(leftovers, [])
+
+    def test_missing_folders_are_created_automatically(self):
+        nested = Path(self._tmp.name) / "not-created-yet" / "Log"
+        self.assertFalse(nested.exists())
+        set_log_root(nested)
+
+        write("AUTO MKDIR")
+
+        self.assertTrue(nested.is_dir())
+        self.assertTrue(Path(daily_directory()).is_dir())
+        self.assertTrue(Path(last_path()).is_file())
+        self.assertTrue(Path(daily_path()).is_file())
+
+    def test_ensure_directories_creates_folders_without_writing_files(self):
+        nested = Path(self._tmp.name) / "startup" / "Log"
+        set_log_root(nested)
+
+        ensure_directories()
+
+        self.assertTrue(nested.is_dir())
+        self.assertTrue(Path(daily_directory()).is_dir())
+        self.assertFalse(Path(last_path()).exists())
 
 
 if __name__ == "__main__":

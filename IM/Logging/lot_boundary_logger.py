@@ -46,6 +46,16 @@ def daily_path(now: datetime | None = None) -> str:
     return os.path.join(daily_directory(now), f"LotBoundary_{date}.txt")
 
 
+def ensure_directories(now: datetime | None = None) -> None:
+    """Create Log root and today's date folder. No-op if they already exist.
+
+    Call at app start if you want the folders visible before the first lot.
+    Write/BeginLot also call this, so you do not have to create folders by hand.
+    """
+    os.makedirs(_log_root, exist_ok=True)
+    os.makedirs(daily_directory(now), exist_ok=True)
+
+
 def begin_lot(lot_id: str | None) -> None:
     with _lock:
         _current_lot.clear()
@@ -71,8 +81,7 @@ def _write_unlocked(message: str | None) -> None:
     line = f"[{now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]}] {message or ''}\n"
     _current_lot.append(line)
 
-    os.makedirs(_log_root, exist_ok=True)
-    os.makedirs(daily_directory(now), exist_ok=True)
+    ensure_directories(now)
 
     _append_and_flush(daily_path(now), line)
     _rewrite_and_flush(last_path(), "".join(_current_lot))
