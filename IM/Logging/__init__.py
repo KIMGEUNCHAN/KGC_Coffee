@@ -11,4 +11,5 @@ from IM.Logging.lot_boundary_logger import (
     reset_for_tests,
     set_log_root,
     write,
+    write_log,
 )

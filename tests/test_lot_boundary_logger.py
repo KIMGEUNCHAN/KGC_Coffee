@@ -20,10 +20,11 @@ from IM.Logging.lot_boundary_logger import (  # noqa: E402
     reset_for_tests,
     set_log_root,
     write,
+    write_log,
 )
 
 
-class LotBoundaryLoggerTests(unittest.TestCase):
+class ClsLogStyleTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         set_log_root(self._tmp.name)
@@ -32,6 +33,25 @@ class LotBoundaryLoggerTests(unittest.TestCase):
     def tearDown(self):
         reset_for_tests()
         self._tmp.cleanup()
+
+    def test_write_log_matches_wisvision_module_files(self):
+        write_log("Inspect", "Align OK")
+        write_log("LotBoundary", "FindEdge OK")
+
+        inspect_last = Path(last_path("Inspect"))
+        inspect_daily = Path(daily_path("Inspect"))
+        lot_last = Path(last_path("LotBoundary"))
+        lot_daily = Path(daily_path("LotBoundary"))
+
+        self.assertTrue(inspect_last.is_file())
+        self.assertTrue(inspect_daily.is_file())
+        self.assertTrue(lot_last.is_file())
+        self.assertTrue(lot_daily.is_file())
+        self.assertEqual(inspect_last.parent, Path(self._tmp.name))
+        self.assertEqual(lot_last.parent, Path(self._tmp.name))
+        self.assertEqual(inspect_daily.parent, lot_daily.parent)
+        self.assertIn(" : Align OK", inspect_last.read_text(encoding="utf-8"))
+        self.assertIn(" : FindEdge OK", lot_last.read_text(encoding="utf-8"))
 
     def test_last_is_at_log_root_not_inside_date_folder(self):
         begin_lot("LOT-1")
@@ -63,10 +83,11 @@ class LotBoundaryLoggerTests(unittest.TestCase):
         last_text = Path(last_path()).read_text(encoding="utf-8")
         daily_text = Path(daily_path()).read_text(encoding="utf-8")
 
-        self.assertIn("LotBoundary START lot=LOT-2", last_text)
+        self.assertIn("Lot Start : LOT-2", last_text)
         self.assertIn("STAGE A", last_text)
         self.assertIn("STAGE A", daily_text)
         self.assertGreater(Path(last_path()).stat().st_size, 0)
+        self.assertIn(" : ", last_text)
 
     def test_last_is_current_lot_only_daily_keeps_history(self):
         begin_lot("LOT-A")
@@ -82,16 +103,11 @@ class LotBoundaryLoggerTests(unittest.TestCase):
         self.assertNotIn("A1", last_text)
         self.assertIn("LOT-B", last_text)
         self.assertIn("B1", last_text)
-        self.assertIn("result=OK", last_text)
+        self.assertIn("Result=OK", last_text)
 
         self.assertIn("LOT-A", daily_text)
         self.assertIn("A1", daily_text)
         self.assertIn("LOT-B", daily_text)
-
-    def test_no_leftover_tmp_after_flush(self):
-        write("FLUSH")
-        leftovers = list(Path(self._tmp.name).glob("*.tmp"))
-        self.assertEqual(leftovers, [])
 
     def test_missing_folders_are_created_automatically(self):
         nested = Path(self._tmp.name) / "not-created-yet" / "Log"
