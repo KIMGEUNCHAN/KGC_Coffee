@@ -1,0 +1,302 @@
+﻿적용방법.txt
+WISVision LotBoundary 로그 현장 적용 메모
+작성: 2026-08-19
+
+※ 이 Cloud Agent에서는 메일을 보낼 수 없습니다.
+   이 메모장 + clsLog.cs 를 USB/공유폴더/GitHub PR로 현장에 가져가면 됩니다.
+   PR: https://github.com/KIMGEUNCHAN/KGC_Coffee/pull/1
+
+
+============================================================
+1. 폴더를 헷갈리지 말 것
+============================================================
+
+로그가 남는 곳 (소스 넣는 곳 아님)
+  C:\WISVision\Log\
+  C:\WISVision\Log\LotBoundary_LAST.txt
+  C:\WISVision\Log\날짜\LotBoundary_날짜.txt
+
+소스를 머지하는 곳 (여기다 cs 파일을 넣음)
+  WISVision IM 유닛 Visual Studio 프로젝트 폴더
+  예)
+    (소스)\IM\
+    (소스)\WISVision\
+    (소스)\Common\
+  기존에 clsLog.cs / Log.cs / WriteLog 함수가 있는 프로젝트가 정답이다.
+
+절대 하지 말 것
+  C:\WISVision\Log 폴더에 cs 파일을 복사하지 않는다.
+  Log 폴더는 실행 결과 txt만 쌓이는 곳이다.
+
+
+============================================================
+2. 현장에 가져갈 파일
+============================================================
+
+필수
+  IM\Logging\clsLog.cs
+
+선택 (LotBoundary 전용 짧은 래퍼, 없어도 됨)
+  IM\Logging\LotBoundaryLogger.cs
+
+이 메모
+  현장적용\적용방법.txt
+
+
+============================================================
+3. 머지 방법 A) 이미 clsLog / WriteLog 가 있는 경우 (대부분)
+============================================================
+
+기존 WriteLog 함수를 찾아라.
+  솔루션에서 "WriteLog" 또는 "clsLog" 검색.
+
+기존 함수가 날짜 폴더 txt만 쓰고 LAST를 안 쓰면,
+아래 두 줄이 들어가게 수정한다.
+
+  string strLast  = strLogPath + "\\" + strName + "_LAST.txt";
+  string strDaily = strDir + "\\" + strName + "_" + strDate + ".txt";
+  WriteLineFlush(strLast,  strLine, bNewLast);  // 루트 LAST, 즉시 Flush
+  WriteLineFlush(strDaily, strLine, false);     // 기존 날짜 폴더 txt
+
+기존 WriteLog 시그니처가 아래와 같으면 그대로 쓴다.
+  clsLog.WriteLog("Inspect", "Align OK");
+LotBoundary도 이름만 바꿔 호출한다.
+  clsLog.WriteLog("LotBoundary", "FindEdge OK");
+
+어제 넣은 LotBoundary 전용 로그 코드
+  (날짜 폴더에 LotBoundary_LAST.txt 쓰기, Flush 없는 AppendAllText)
+  는 삭제한다.
+
+
+============================================================
+4. 머지 방법 B) clsLog 가 없는 경우
+============================================================
+
+1) clsLog.cs 를 IM 프로젝트 폴더로 복사
+   예: (소스)\IM\Logging\clsLog.cs
+       또는 Common 폴더
+
+2) Visual Studio에서 프로젝트에 파일을 추가한다.
+
+   VS 2015 / 2017 / 2019 / 2022 공통
+   - 솔루션 탐색기에서 IM 프로젝트(또는 Common) 우클릭
+   - [추가] - [기존 항목]
+   - clsLog.cs 선택
+   - 확인
+
+   또는 프로젝트 우클릭 - [추가] - [새 폴더] Logging
+   그 폴더에 clsLog.cs 기존 항목 추가
+
+3) csproj에 아래가 생겼는지 확인 (없는 경우 직접 추가)
+
+   <Compile Include="Logging\clsLog.cs" />
+
+   구형 csproj가 아니면 SDK 스타일은 폴더에 넣기만 해도 자동 포함된다.
+
+4) 네임스페이스
+   clsLog 는 namespace WISVision 이다.
+   호출하는 .cs 파일 상단에 없으면 추가:
+
+   using WISVision;
+
+
+============================================================
+5. LotBoundary 단계에 호출 넣기
+============================================================
+
+Lot ID 받은 직후 (LAST 파일을 새 Lot 으로 초기화)
+  clsLog.WriteLog("LotBoundary", "Lot Start : " + strLotID, true);
+
+각 단계 끝날 때마다
+  clsLog.WriteLog("LotBoundary", "FindEdge OK");
+  clsLog.WriteLog("LotBoundary", "ALIGN NG offsetX=1.2");
+
+Lot 종료
+  clsLog.WriteLog("LotBoundary", "Lot End : " + strLotID + " Result=" + strResult);
+
+Inspect 로그 남기는 것과 동일하다. 모듈 이름만 "LotBoundary" 이다.
+
+
+============================================================
+6. 빌드 / 현장 배포
+============================================================
+
+1) Visual Studio에서 IM 프로젝트 다시 빌드 (Release)
+2) 나온 exe / dll 을 현장 실행 폴더에 복사
+   예: C:\WISVision\Bin\  또는 기존에 exe 있던 곳
+3) WISVision 프로그램 종료 후 파일 교체, 다시 실행
+4) 소스만 바꾸고 exe를 안 바꾸면 로그는 안 바뀐다.
+
+
+============================================================
+7. 적용 확인
+============================================================
+
+프로그램을 켠 뒤 LotBoundary 단계가 한 번이라도 돌면
+아래 파일이 생겨야 한다.
+
+  C:\WISVision\Log\LotBoundary_LAST.txt
+  C:\WISVision\Log\오늘날짜\LotBoundary_오늘날짜.txt
+
+메모장으로 LAST를 열어서 내용이 보여야 한다. (0바이트면 Flush 실패)
+날짜 폴더는 기존 Inspect 등과 같은 폴더여야 한다.
+Log 폴더에 다른 모듈 로그는 있는데 LotBoundary_LAST 만 없으면
+호출부가 아직 안 들어간 것이다.
+
+
+============================================================
+8. 출력 형식
+============================================================
+
+2026-08-19 10:15:03.123 : Lot Start : LOT123
+2026-08-19 10:15:03.450 : FindEdge OK
+2026-08-19 10:15:04.001 : Lot End : LOT123 Result=OK
+
+
+============================================================
+9. 수정 코드 전문 (clsLog.cs)
+============================================================
+
+아래를 새 파일 clsLog.cs 로 저장해도 되고,
+IM\Logging\clsLog.cs 원본을 복사해도 된다.
+
+using System;
+using System.IO;
+using System.Text;
+using System.Threading;
+
+namespace WISVision
+{
+    /// <summary>
+    /// WISVision 기존 로그 방식.
+    ///
+    ///   clsLog.WriteLog("Inspect", "Align OK");
+    ///   clsLog.WriteLog("LotBoundary", "FindEdge OK");
+    ///
+    /// 파일
+    ///   C:\WISVision\Log\{Name}_LAST.txt
+    ///   C:\WISVision\Log\{날짜}\{Name}_{날짜}.txt
+    ///
+    /// 날짜 폴더는 기존 WISVision 폴더를 그대로 쓴다.
+    /// 한 줄 형식: yyyy-MM-dd HH:mm:ss.fff : 메시지
+    /// 매번 StreamWriter 닫고 FileStream.Flush(true) 해서 즉시 디스크에 남긴다.
+    /// </summary>
+    public class clsLog
+    {
+        public static string strLogPath = @"C:\WISVision\Log";
+
+        static readonly object objLock = new object();
+        static readonly string[] arrDateFmt = new string[] { "yyyyMMdd", "yyyy-MM-dd", "yyyy_MM_dd" };
+
+        public static void WriteLog(string strLog)
+        {
+            WriteLog("System", strLog, false);
+        }
+
+        public static void WriteLog(string strName, string strLog)
+        {
+            WriteLog(strName, strLog, false);
+        }
+
+        /// <param name="bNewLast">true 이면 LAST 파일을 비우고 새로 쓴다 (Lot 시작).</param>
+        public static void WriteLog(string strName, string strLog, bool bNewLast)
+        {
+            if (strName == null || strName == "")
+            {
+                strName = "System";
+            }
+            if (strLog == null)
+            {
+                strLog = "";
+            }
+
+            lock (objLock)
+            {
+                DateTime dtNow = DateTime.Now;
+                string strDate = GetDateStamp(dtNow);
+                string strDir = Path.Combine(strLogPath, strDate);
+                string strDaily = Path.Combine(strDir, strName + "_" + strDate + ".txt");
+                string strLast = Path.Combine(strLogPath, strName + "_LAST.txt");
+                string strLine = dtNow.ToString("yyyy-MM-dd HH:mm:ss.fff") + " : " + strLog;
+
+                Directory.CreateDirectory(strLogPath);
+                Directory.CreateDirectory(strDir);
+
+                WriteLineFlush(strLast, strLine, bNewLast);
+                WriteLineFlush(strDaily, strLine, false);
+            }
+        }
+
+        static string GetDateStamp(DateTime dtNow)
+        {
+            int i;
+            for (i = 0; i < arrDateFmt.Length; i++)
+            {
+                string strStamp = dtNow.ToString(arrDateFmt[i]);
+                if (Directory.Exists(Path.Combine(strLogPath, strStamp)))
+                {
+                    return strStamp;
+                }
+            }
+            return dtNow.ToString("yyyyMMdd");
+        }
+
+        static void WriteLineFlush(string strFile, string strLine, bool bNewFile)
+        {
+            FileMode eMode = FileMode.Append;
+            if (bNewFile || !File.Exists(strFile))
+            {
+                eMode = FileMode.Create;
+            }
+
+            FileStream fs = null;
+            StreamWriter sw = null;
+            int nRetry = 0;
+            while (nRetry < 8)
+            {
+                try
+                {
+                    fs = new FileStream(strFile, eMode, FileAccess.Write, FileShare.ReadWrite);
+                    sw = new StreamWriter(fs, Encoding.Default);
+                    sw.AutoFlush = true;
+                    sw.WriteLine(strLine);
+                    sw.Flush();
+                    fs.Flush(true);
+                    return;
+                }
+                catch (IOException)
+                {
+                    nRetry = nRetry + 1;
+                    Thread.Sleep(20 * nRetry);
+                }
+                finally
+                {
+                    if (sw != null)
+                    {
+                        sw.Close();
+                        sw = null;
+                    }
+                    if (fs != null)
+                    {
+                        fs.Close();
+                        fs = null;
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+============================================================
+10. 선택 래퍼 (LotBoundaryLogger.cs)
+============================================================
+
+clsLog.WriteLog 를 직접 쓰기 싫고 BeginLot/Write/EndLot 로 쓰려면
+IM\Logging\LotBoundaryLogger.cs 도 같은 방식으로 프로젝트에 추가.
+
+  LotBoundaryLogger.BeginLot(strLotID);
+  LotBoundaryLogger.Write("FindEdge OK");
+  LotBoundaryLogger.EndLot(strLotID, "OK");
+
+끝.
