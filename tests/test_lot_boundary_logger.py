@@ -15,6 +15,7 @@ from IM.Logging.lot_boundary_logger import (  # noqa: E402
     end_lot,
     ensure_directories,
     last_path,
+    recover_last_from_dated_logs,
     reset_for_tests,
     set_log_root,
     write,
@@ -112,6 +113,34 @@ class LotBoundaryLoggerTests(unittest.TestCase):
         self.assertTrue(nested.is_dir())
         self.assertTrue(Path(daily_directory()).is_dir())
         self.assertFalse(Path(last_path()).exists())
+
+    def test_recover_last_from_date_folder_last_file(self):
+        dated_last = Path(daily_directory()) / LAST_FILE_NAME
+        dated_last.parent.mkdir(parents=True)
+        dated_last.write_text("from-date-folder\n", encoding="utf-8")
+
+        self.assertFalse(Path(last_path()).exists())
+        self.assertTrue(recover_last_from_dated_logs())
+        self.assertEqual(Path(last_path()).read_text(encoding="utf-8"), "from-date-folder\n")
+
+    def test_recover_last_from_daily_lotboundary_log(self):
+        daily = Path(daily_path())
+        daily.parent.mkdir(parents=True)
+        daily.write_text("daily-lotboundary\n", encoding="utf-8")
+
+        self.assertTrue(recover_last_from_dated_logs())
+        self.assertEqual(Path(last_path()).read_text(encoding="utf-8"), "daily-lotboundary\n")
+
+    def test_write_puts_last_at_root_even_if_other_logs_already_exist(self):
+        other = Path(daily_directory()) / "Inspect_20260819.txt"
+        other.parent.mkdir(parents=True)
+        other.write_text("other module\n", encoding="utf-8")
+
+        write("LOTBOUNDARY STAGE")
+
+        self.assertTrue(Path(last_path()).is_file())
+        self.assertIn("LOTBOUNDARY STAGE", Path(last_path()).read_text(encoding="utf-8"))
+        self.assertFalse((Path(daily_directory()) / LAST_FILE_NAME).exists())
 
 
 if __name__ == "__main__":

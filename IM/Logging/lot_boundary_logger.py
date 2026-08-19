@@ -49,11 +49,30 @@ def daily_path(now: datetime | None = None) -> str:
 def ensure_directories(now: datetime | None = None) -> None:
     """Create Log root and today's date folder. No-op if they already exist.
 
-    Call at app start if you want the folders visible before the first lot.
-    Write/BeginLot also call this, so you do not have to create folders by hand.
+    If LotBoundary logs already exist only under a date folder, copy the newest
+    one to {root}/LotBoundary_LAST.txt so LAST appears even when other WISVision
+    logs are already being written.
     """
     os.makedirs(_log_root, exist_ok=True)
     os.makedirs(daily_directory(now), exist_ok=True)
+    recover_last_from_dated_logs()
+
+
+def recover_last_from_dated_logs() -> bool:
+    """Copy a dated LotBoundary log up to the root LAST file if LAST is missing."""
+    if os.path.isfile(last_path()):
+        return False
+
+    os.makedirs(_log_root, exist_ok=True)
+
+    dated_last_today = os.path.join(daily_directory(), LAST_FILE_NAME)
+    if _copy_if_exists(dated_last_today, last_path()):
+        return True
+    if _copy_if_exists(daily_path(), last_path()):
+        return True
+
+    newest = _find_newest_lotboundary_file()
+    return _copy_if_exists(newest, last_path())
 
 
 def begin_lot(lot_id: str | None) -> None:
@@ -83,8 +102,8 @@ def _write_unlocked(message: str | None) -> None:
 
     ensure_directories(now)
 
-    _append_and_flush(daily_path(now), line)
     _rewrite_and_flush(last_path(), "".join(_current_lot))
+    _append_and_flush(daily_path(now), line)
 
 
 def _append_and_flush(path: str, text: str) -> None:
@@ -105,3 +124,52 @@ def _rewrite_and_flush(path: str, content: str) -> None:
     finally:
         os.close(fd)
     os.replace(temp_path, path)
+
+
+def _copy_if_exists(source: str | None, destination: str) -> bool:
+    if not source or not os.path.isfile(source):
+        return False
+    if os.path.abspath(source) == os.path.abspath(destination):
+        return False
+    with open(source, "rb") as src:
+        data = src.read()
+    fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    return True
+
+
+def _find_newest_lotboundary_file() -> str | None:
+    newest = None
+    newest_mtime = -1.0
+    try:
+        entries = os.listdir(_log_root)
+    except OSError:
+        return None
+
+    for name in entries:
+        folder = os.path.join(_log_root, name)
+        if not os.path.isdir(folder):
+            continue
+        candidates = [os.path.join(folder, LAST_FILE_NAME)]
+        try:
+            candidates.extend(
+                os.path.join(folder, f)
+                for f in os.listdir(folder)
+                if f.startswith("LotBoundary_") and f.endswith(".txt")
+            )
+        except OSError:
+            continue
+        for path in candidates:
+            if not os.path.isfile(path):
+                continue
+            if os.path.abspath(path) == os.path.abspath(last_path()):
+                continue
+            mtime = os.path.getmtime(path)
+            if newest is None or mtime >= newest_mtime:
+                newest = path
+                newest_mtime = mtime
+    return newest
