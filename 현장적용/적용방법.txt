@@ -1,0 +1,245 @@
+﻿적용방법.txt
+WISVision IM AOI Keys 현장 적용 메모
+작성: 2026-08-21
+
+※ 이 환경에서는 메일을 보낼 수 없습니다. 아래 zip을 받아 직접 전달하면 됩니다.
+   전달 대상: rmscks104@gmail.com
+   (현장: gckim@ati2000.co.kr)
+   zip: WISVision_AOI_Keys.zip
+
+
+============================================================
+1. 폴더를 헷갈리지 말 것
+============================================================
+
+설정 / 로그가 남는 곳 (소스 넣는 곳 아님)
+  C:\WISVision\Config\AOIKeys.ini
+  C:\WISVision\Log\AOIKeys_LAST.txt
+  C:\WISVision\Log\날짜\AOIKeys_날짜.txt
+
+소스를 머지하는 곳 (여기다 cs 파일을 넣음)
+  WISVision IM 유닛 Visual Studio 프로젝트 폴더
+  예)
+    (소스)\IM\
+    (소스)\WISVision\
+    (소스)\Common\
+  기존에 KeyDown / ProcessCmdKey 가 있는 Form 이 정답이다.
+
+절대 하지 말 것
+  C:\WISVision\Log 폴더에 cs 파일을 복사하지 않는다.
+  C:\WISVision\Config 폴더에 cs 파일을 복사하지 않는다.
+  Config 에는 AOIKeys.ini 만 둔다.
+
+
+============================================================
+2. 현장에 가져갈 파일
+============================================================
+
+필수
+  IM\Keys\clsAOIKeys.cs
+  IM\Keys\AOIKeys.ini   →  현장에서는 C:\WISVision\Config\AOIKeys.ini
+
+이 메모
+  현장적용\적용방법.txt
+
+
+============================================================
+3. INI 먼저 복사
+============================================================
+
+1) C:\WISVision\Config 폴더가 없으면 만든다.
+2) AOIKeys.ini 를 그 폴더에 복사한다.
+3) 메모장으로 열어서 키를 바꾸면 된다. 프로그램 재시작 후 Load() 하면 반영.
+
+기본 키
+  Start=F5          Stop=Escape       Pause=F6
+  Auto=F4           Manual=F3
+  Grab=F2           Live=F1           Align=A
+  OK=Enter          NG=Space          Retry=R          Skip=S
+  Next=Right        Prev=Left         NextRow=Down     PrevRow=Up     Home=Home
+  Save=F9           Recipe=F10
+  Class1=D1,NumPad1 ... Class9=D9,NumPad9
+
+한 동작에 키를 여러 개 주려면 콤마로 쓴다.
+조합키는 Ctrl+F5 처럼 + 로 쓴다.
+주석은 ; 또는 #
+
+
+============================================================
+4. 머지 방법 A) 이미 단축키 / KeyDown 코드가 있는 경우
+============================================================
+
+솔루션에서 "KeyDown", "ProcessCmdKey", "Keys.F5" 를 검색한다.
+
+기존에 F5 / Escape 를 if 문으로 직접 비교하고 있으면
+그 분기를 clsAOIKeys.ProcessKey 로 바꾼다.
+
+  string strAction = clsAOIKeys.ProcessKey((int)e.KeyData);
+  if (strAction != "")
+  {
+      // 아래 5번 switch 로 기존 함수 호출
+      e.Handled = true;
+      return;
+  }
+
+어제 넣은 하드코딩 키값 (Keys.F5 직접 비교 등) 은 중복 동작하지 않게 삭제한다.
+INI 와 코드가 둘 다 F5 를 Start 로 처리하면 두 번 실행된다.
+
+
+============================================================
+5. 머지 방법 B) 단축키 모듈이 없는 경우
+============================================================
+
+1) clsAOIKeys.cs 를 IM 프로젝트 폴더로 복사
+   예: (소스)\IM\Keys\clsAOIKeys.cs
+
+2) Visual Studio에서 프로젝트에 파일을 추가한다.
+
+   VS 2015 / 2017 / 2019 / 2022 공통
+   - 솔루션 탐색기에서 IM 프로젝트 우클릭
+   - [추가] - [기존 항목]
+   - clsAOIKeys.cs 선택
+   - 확인
+
+3) csproj에 아래가 생겼는지 확인 (없는 경우 직접 추가)
+
+   <Compile Include="Keys\clsAOIKeys.cs" />
+
+   구형 csproj가 아니면 SDK 스타일은 폴더에 넣기만 해도 자동 포함된다.
+
+4) 네임스페이스
+   clsAOIKeys 는 namespace WISVision 이다.
+   호출하는 .cs 파일 상단에 없으면 추가:
+
+   using WISVision;
+
+
+============================================================
+6. 호출부 (Form 기동 + KeyDown)
+============================================================
+
+메인 Form 생성자 또는 Load
+
+  this.KeyPreview = true;
+  clsAOIKeys.Load();   // C:\WISVision\Config\AOIKeys.ini
+                       // 파일 없으면 기본키 사용. 없으면 만들려면 SaveDefault()
+
+KeyDown  (KeyData 를 넘긴다. KeyCode 만 넘기면 Ctrl 조합이 빠진다)
+
+  private void Form_KeyDown(object sender, KeyEventArgs e)
+  {
+      string strAction = clsAOIKeys.ProcessKey((int)e.KeyData);
+      if (strAction == null || strAction == "")
+      {
+          return;
+      }
+
+      int nClass = clsAOIKeys.ClassNoFromAction(strAction);
+      if (nClass > 0)
+      {
+          // 기존 불량코드 적용 함수 호출
+          // SetDefectClass(nClass);
+          e.Handled = true;
+          return;
+      }
+
+      switch (strAction)
+      {
+          case "Start":   /* 기존 운전 시작 */ break;
+          case "Stop":    /* 기존 정지 */ break;
+          case "Pause":   /* 일시정지 */ break;
+          case "Auto":    /* 자동 */ break;
+          case "Manual":  /* 수동 */ break;
+          case "Grab":    /* 촬상 */ break;
+          case "Live":    /* 라이브 */ break;
+          case "Align":   /* 정렬 */ break;
+          case "OK":      /* 양품 */ break;
+          case "NG":      /* 불량 */ break;
+          case "Retry":   /* 재검사 */ break;
+          case "Skip":    /* 스킵 */ break;
+          case "Next":    /* 다음 셀 */ break;
+          case "Prev":    /* 이전 셀 */ break;
+          case "NextRow": /* 다음 행 */ break;
+          case "PrevRow": /* 이전 행 */ break;
+          case "Home":    /* 원점 */ break;
+          case "Save":    /* 저장 */ break;
+          case "Recipe":  /* 레시피 */ break;
+      }
+      e.Handled = true;
+  }
+
+ProcessCmdKey 를 쓰는 화면이면 동일하다.
+
+  protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+  {
+      string strAction = clsAOIKeys.ProcessKey((int)keyData);
+      if (strAction != "")
+      {
+          // 위와 같은 switch
+          return true;
+      }
+      return base.ProcessCmdKey(ref msg, keyData);
+  }
+
+
+============================================================
+7. 빌드 / 현장 배포
+============================================================
+
+1) Visual Studio에서 IM 프로젝트 다시 빌드 (Release)
+2) 나온 exe / dll 을 현장 실행 폴더에 복사
+   예: C:\WISVision\Bin\  또는 기존에 exe 있던 곳
+3) AOIKeys.ini 를 C:\WISVision\Config\ 에 복사
+4) WISVision 프로그램 종료 후 파일 교체, 다시 실행
+5) 소스만 바꾸고 exe를 안 바꾸면 키는 안 바뀐다.
+
+
+============================================================
+8. 적용 확인
+============================================================
+
+프로그램을 켠 뒤 F5 를 한 번 누른다.
+
+  C:\WISVision\Config\AOIKeys.ini          있어야 함 (없으면 기본키만 동작)
+  C:\WISVision\Log\AOIKeys_LAST.txt        생겨야 함
+  C:\WISVision\Log\오늘날짜\AOIKeys_오늘날짜.txt
+
+메모장으로 LAST를 열어서 아래처럼 보여야 한다. (0바이트면 Flush 실패)
+
+  2026-08-21 16:01:02.123 : Action=Start Key=F5
+
+숫자키 3 또는 키패드 3 을 누르면 Class3 이 남아야 한다.
+
+  Action=Class3 Key=D3
+  Action=Class3 Key=NumPad3
+
+Log 폴더에 다른 모듈 로그는 있는데 AOIKeys_LAST 만 없으면
+KeyDown 호출부가 아직 안 들어간 것이다.
+
+
+============================================================
+9. 출력 형식
+============================================================
+
+2026-08-21 16:01:02.123 : Action=Start Key=F5
+2026-08-21 16:01:03.010 : Action=Align Key=A
+2026-08-21 16:01:04.440 : Action=Class3 Key=NumPad3
+
+
+============================================================
+10. 핵심 API
+============================================================
+
+  clsAOIKeys.Load();
+  clsAOIKeys.SaveDefault();                         // INI 없을 때 기본파일 생성
+  clsAOIKeys.ProcessKey((int)e.KeyData);            // 동작명 또는 ""
+  clsAOIKeys.TryGetAction("F5");                    // 로그 안 남김
+  clsAOIKeys.ClassNoFromAction("Class3");           // 3, 아니면 0
+  clsAOIKeys.Bind("Start", "F8");
+  clsAOIKeys.BindClass(3, "Q");
+  clsAOIKeys.ParseKey("Ctrl+F5");
+  clsAOIKeys.KeyName(nKeyData);
+
+cs 원본은 같은 폴더의 clsAOIKeys.cs 를 프로젝트에 추가하면 된다.
+
+끝.
