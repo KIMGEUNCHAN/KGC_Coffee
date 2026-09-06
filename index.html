@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1c1410" />
+    <title>주말 스톱워치 · 영어 공부 20분</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231c1410'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23e8c39a' stroke-width='2'/%3E%3Cpath d='M16 10v6l4 2' stroke='%23e8c39a' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="grain" aria-hidden="true"></div>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <p class="eyebrow">KGC Coffee · Weekend</p>
+          <h1>주말 시간관리</h1>
+        </div>
+      </div>
+      <p class="today" id="today-label"></p>
+    </header>
+
+    <main class="layout">
+      <section class="stage" aria-labelledby="activity-title">
+        <p class="mode-pill" id="mode-pill">타이머</p>
+        <div class="ring-wrap">
+          <svg class="ring" viewBox="0 0 240 240" aria-hidden="true">
+            <circle class="ring-track" cx="120" cy="120" r="104" />
+            <circle class="ring-progress" id="ring-progress" cx="120" cy="120" r="104" />
+          </svg>
+          <div class="clock">
+            <p class="clock-time" id="clock-time">20:00</p>
+            <h2 class="clock-label" id="activity-title">영어 공부</h2>
+            <p class="clock-sub" id="clock-sub">목표 20분</p>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button type="button" class="btn primary" id="btn-toggle">시작</button>
+          <button type="button" class="btn ghost" id="btn-reset">리셋</button>
+          <button type="button" class="btn ghost" id="btn-done" hidden>완료로 기록</button>
+        </div>
+        <p class="hint">스페이스: 시작/일시정지 · R: 리셋</p>
+      </section>
+
+      <aside class="panel">
+        <section>
+          <div class="section-head">
+            <h3>활동</h3>
+            <button type="button" class="text-btn" id="btn-add">+ 추가</button>
+          </div>
+          <ul class="activities" id="activity-list"></ul>
+          <form class="add-form" id="add-form" hidden>
+            <label>
+              이름
+              <input id="add-name" type="text" maxlength="20" placeholder="예: 단어 암기" required />
+            </label>
+            <label>
+              분
+              <input id="add-minutes" type="number" min="0" max="180" value="20" />
+            </label>
+            <p class="form-note">0분이면 자유 스톱워치로 저장됩니다.</p>
+            <div class="form-actions">
+              <button type="submit" class="btn compact">저장</button>
+              <button type="button" class="btn compact ghost" id="btn-add-cancel">취소</button>
+            </div>
+          </form>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h3>이번 주말</h3>
+            <p class="total" id="weekend-total">0분</p>
+          </div>
+          <div class="bars" id="weekend-bars"></div>
+          <div id="session-list"></div>
+          <button type="button" class="text-btn danger" id="btn-clear" hidden>기록 지우기</button>
+        </section>
+      </aside>
+    </main>
+
+    <div class="toast" id="toast" hidden role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
