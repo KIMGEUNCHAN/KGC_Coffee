@@ -221,6 +221,8 @@ function renderSessions() {
     empty.textContent = "아직 이번 주말 기록이 없습니다.";
     els.sessions.appendChild(empty);
   } else {
+    const list = document.createElement("ol");
+    list.className = "sessions";
     sessions.slice(0, 8).forEach((session) => {
       const li = document.createElement("li");
       li.className = "session";
@@ -234,8 +236,9 @@ function renderSessions() {
       const time = document.createElement("time");
       time.textContent = when;
       li.append(label, time);
-      els.sessions.appendChild(li);
+      list.appendChild(li);
     });
+    els.sessions.appendChild(list);
   }
   els.clear.hidden = sessions.length === 0;
 }
