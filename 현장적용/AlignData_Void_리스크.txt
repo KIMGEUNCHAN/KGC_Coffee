@@ -1,0 +1,207 @@
+WISVision IM — Void 검사 Good/NG 를 AlignData.csv 에 남길 때
+문제될 수 있는 점
+
+작성: 2026-09-08
+대상: 현장 WISVision IM 유닛
+이 GitHub 에는 실제 AlignData.csv 원본 포맷이 없다.
+아래는 현장 AlignData.csv 가 정렬 오프셋 파일로 쓰인다는
+전제로 본 리스크다. 적용 전에 현장 파일 한 장을 열어
+헤더/행 의미를 확인해야 한다.
+
+
+============================================================
+0. 한 줄 결론
+============================================================
+
+맞다. 그 모순이 핵심이다.
+
+현재
+  Good 이 뜨지 않으면 AlignData.csv 를 저장하지 않는다.
+  그래서 파일에서 NG 와 Good 을 확인하고 싶어도
+  csv 에는 Good 만 남는다.
+
+수정
+  Void 판정 직후, NG 팝업 / Unload 보다 먼저
+  Good 이든 NG 든 AlignData.csv 를 저장한다.
+  값만 VoidResult=GOOD / VoidResult=NG 로 다르게 남긴다.
+
+현장 안티패턴
+
+  if (bVoidGood)
+  {
+      SaveAlignData();   // NG 면 호출 안 됨 → 모순
+  }
+
+고친 호출
+
+  SaveAlignData();   // 메모리 오프셋을 NG 일 때도 파일로
+  AlignDataVoidLogger.SaveAfterVoidInspect(strAlignCsv, strDieNo,
+      bVoidGood ? "GOOD" : "NG");
+  if (!bVoidGood)
+  {
+      // 알람 / Unload / Manual Remove / Retry 팝업
+  }
+
+
+============================================================
+1. AlignData.csv 가 보통 하는 일
+============================================================
+
+Align 단계가 쓸 때 한 행 = 한 정렬 포인트(다이/마크).
+대략 이런 숫자 계약이다. (현장 헤더는 다를 수 있음)
+
+  No,PosX,PosY,OffsetX,OffsetY,Score,Result
+  1,10.0,20.0,0.012,-0.008,98.5,OK
+  2,10.0,40.0,-0.004,0.021,97.1,OK
+
+이 파일을 나중에 읽는 곳 (현장 검색: AlignData, ReadCsv, StreamReader)
+
+  - Void / AOI / Review 좌표 보정 (오프셋 적용)
+  - 다음 다이 이동
+  - 엑셀 분석, 레시피 튜닝
+  - CIM / 호스트 메트롤로지 업로드
+
+여기는 숫자와 고정 열 개수를 전제로 파싱하는 코드가 많다.
+
+
+============================================================
+2. 문제될 요소 (우선순위)
+============================================================
+
+(1) 파일 덮어쓰기 — 가장 위험
+  Void 로그 쓸 때 new FileStream(..., FileMode.Create)
+  또는 File.WriteAllText 를 쓰면 Align 오프셋이 전부 지워진다.
+  이후 Void 좌표 보정이 0 이 되거나 예외가 난다.
+  정렬은 OK 였는데 Void 가 전부 NG 로 보이거나 크래시.
+
+(2) 행을 추가하면 정렬 포인트 수가 늘어난다
+  Align 2점인데 Void NG 한 줄을 Append 하면 리더는 3점으로 읽는다.
+  오프셋 평균/보정, 다이 인덱스, 호스트 사이트 카운트가 틀어진다.
+  GOOD/NG 문자열 행은 double.Parse 에서 예외.
+
+(3) 기존 Result 칸을 Void 판정으로 덮는다
+  Result=OK 는 보통 Align OK 이다.
+  여기를 Void NG 로 바꾸면 정렬은 성공했는데 정렬 NG 로 남는다.
+  재작업/리포트/호스트가 잘못된 단계를 본다.
+
+(4) 숫자 칸에 GOOD/NG 를 넣는다
+  OffsetX=NG 가 되면 보정값이 NaN.
+  스테이지가 이상한 좌표로 움직일 수 있다.
+
+(5) 열 개수 / 헤더 불일치
+  리더가 Split(',') 후 arr[6] 고정이면
+  가운데에 열을 끼워 넣는 순간 인덱스가 밀린다.
+  맨 끝 열 추가는 무시하는 리더가 많아서 비교적 안전.
+  가운데 삽입은 위험.
+
+(6) 헤더 없는 파일
+  첫 행이 데이터인데 VoidResult 헤더를 맨 위에 넣으면
+  1번 정렬점이 헤더로 먹히거나, 헤더가 데이터로 파싱된다.
+
+(7) 파일 잠금
+  작업자가 엑셀로 AlignData.csv 를 열어 두면
+  Exclusive Write 는 IOException.
+  Void 판정 로그가 조용히 빠지거나, 검사 시퀀스가 죽는다.
+  FileShare.ReadWrite + 재시도 + Flush 가 필요하다.
+  (LotBoundary LAST 가 안 남던 것과 같은 계열)
+
+(8) 인코딩
+  clsLog 는 Encoding.Default (CP949).
+  AlignData.csv 가 ASCII/UTF-8 이면 한글 사유를 넣는 순간
+  엑셀/리더가 깨진다. GOOD/NG 영문만 쓰는 편이 안전.
+
+(9) 콤마 / 개행이 들어간 메시지
+  CSV 에 "void size=1.2,2.3" 처럼 콤마를 따옴표 없이 넣으면 열이 밀린다.
+  판정은 GOOD/NG 한 토큰만. 상세는 Inspect 로그로.
+
+(10) Retry / 재검사
+  Void NG → Retry 하면 같은 다이 행이 두 번 Append 되기 쉽다.
+  갱신은 같은 행의 VoidResult 칸만 덮는다.
+  최종 판정만 남겨야 한다. 이력은 Inspect 로그.
+
+(11) Unload / Manual Remove 전에 Flush
+  Void NG 후 Unload 로 IM Inspection Error 가 뜨기 전에
+  파일이 버퍼에만 있으면 csv 가 0바이트/부분기록이다.
+  StreamWriter 닫고 FileStream.Flush(true).
+
+(12) 파일 수명
+  다음 웨이퍼 Align 시작 때 AlignData.csv 를 새로 만드는
+  코드가 있으면 Void 기록은 웨이퍼 단위로 사라진다.
+  로트 추적이 목표면 날짜 폴더 복사 또는 VoidData.csv 가 맞다.
+
+(13) 검사 단위가 다르다
+  Align 1행 = 1 마크/다이
+  Void 는 FOV 여러 장, 또는 웨이퍼 종합 1개.
+  행 수가 다르면 어느 행에 GOOD/NG 를 넣을지 애매하다.
+  웨이퍼 종합 판정을 AlignData 새 행으로 넣지 말 것.
+
+(14) 호스트 / 엑셀 매크로
+  AlignData 를 메트롤로지로 올리는 설비가 있으면
+  새 열/문자열 때문에 업로드 NG 가 날 수 있다.
+  현장 업로드 스크립트/매크로가 AlignData.csv 를 쓰는지 확인.
+
+(15) 타이밍
+  Align 끝나기 전에 Void 가 파일을 열면 빈 파일이거나
+  헤더만 있다. Void 로그는 Align 파일 존재 확인 후에.
+
+
+============================================================
+3. 권장 기록 방법
+============================================================
+
+A. 가장 안전 (권장)
+  C:\WISVision\Log\Void_LAST.txt          clsLog.WriteLog("Void", "GOOD")
+  C:\WISVision\Log\{날짜}\Void_{날짜}.txt
+  또는 결과 폴더 VoidData.csv 를 AlignData 옆에 따로.
+
+B. AlignData.csv 에 꼭 넣어야 하면
+  - 기존 행/기존 열은 그대로
+  - 맨 끝 열 VoidResult 만 추가/갱신
+  - 값은 GOOD 또는 NG
+  - 매칭 키: No / DieX,DieY 등 현장 헤더
+  - FileMode.OpenOrCreate + Append 가 아니라
+    읽기 → 해당 칸 수정 → 전체 쓰기 (또는 행 단위 갱신)
+  - 쓰기 전 백업 AlignData.bak
+  - Flush(true), FileShare.ReadWrite
+  - Align Result 칸은 손대지 않음
+
+C. 웨이퍼 종합 판정
+  AlignData 가 아니라
+  clsLog.WriteLog("Void", "Wafer=GOOD")
+  또는 VoidData.csv 한 줄.
+
+
+============================================================
+4. 현장 적용 전 체크
+============================================================
+
+1) 실제 AlignData.csv 를 메모장으로 연다.
+   경로 예)
+     C:\WISVision\Data\AlignData.csv
+     C:\WISVision\Result\{Lot}\{Wafer}\AlignData.csv
+2) 헤더 있는지, 열 이름, 한 웨이퍼에 몇 행인지 적는다.
+3) VS 에서 "AlignData" 검색.
+   쓰는 곳 / 읽는 곳 목록을 만든다.
+4) 읽는 코드가 열 개수 고정인지, 숫자 Parse 인지 확인.
+5) Void 판정 코드가 FileMode.Create 인지 Append 인지 확인.
+6) 엑셀로 연 채로 Void 검사를 한 번 해 본다 (잠금).
+7) Align OK → Void NG → Unload 후 csv 가 남아 있는지 본다.
+
+
+============================================================
+5. 이 패킷의 대조 코드
+============================================================
+
+  IM\Logging\AlignDataVoidLogger.cs
+  IM\Logging\align_data_void_logger.py
+  tests\test_align_data_void_logger.py
+
+동작
+  기존 AlignData.csv 를 유지하고 VoidResult 열만 갱신.
+  오프셋 열은 수정하지 않음.
+  Create 로 파일을 비우지 않음.
+  새 정렬 행을 추가하지 않음.
+
+현장 원본 Align 쓰기 코드를 이 파일로 교체하지 말 것.
+Void 판정 직후에만 WriteDieResult / WriteWaferResult 를 호출.
+끝.
