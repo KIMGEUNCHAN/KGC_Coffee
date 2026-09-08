@@ -13,22 +13,34 @@ WISVision IM — Void 검사 Good/NG 를 AlignData.csv 에 남길 때
 0. 한 줄 결론
 ============================================================
 
-문제될 요소가 있다. 가장 큰 것은 AlignData.csv 가
-판정 로그 파일이 아니라 정렬 오프셋 계약 파일이라는 점이다.
+맞다. 그 모순이 핵심이다.
 
-Void Good/NG 를 같은 파일에 행으로 추가하거나
-OffsetX/Y 같은 숫자 칸에 넣거나, 파일을 Create 로 다시 쓰면
-정렬 리더 / 다음 공정 / 호스트 업로드가 깨질 수 있다.
+현재
+  Good 이 뜨지 않으면 AlignData.csv 를 저장하지 않는다.
+  그래서 파일에서 NG 와 Good 을 확인하고 싶어도
+  csv 에는 Good 만 남는다.
 
-안전한 쪽
-  1) 별도 VoidData.csv 또는 Inspect 로그   ← 가장 안전
-  2) 기존 AlignData 행을 유지한 채 맨 끝 칸 VoidResult 만 갱신
+수정
+  Void 판정 직후, NG 팝업 / Unload 보다 먼저
+  Good 이든 NG 든 AlignData.csv 를 저장한다.
+  값만 VoidResult=GOOD / VoidResult=NG 로 다르게 남긴다.
 
-하면 안 되는 쪽
-  - FileMode.Create 로 AlignData.csv 를 새로 만들기
-  - GOOD/NG 를 새 행으로 Append (정렬 포인트로 오인)
-  - Result(정렬 판정) 칸을 Void 판정으로 덮기
-  - OffsetX, OffsetY, Score 칸에 문자열 넣기
+현장 안티패턴
+
+  if (bVoidGood)
+  {
+      SaveAlignData();   // NG 면 호출 안 됨 → 모순
+  }
+
+고친 호출
+
+  SaveAlignData();   // 메모리 오프셋을 NG 일 때도 파일로
+  AlignDataVoidLogger.SaveAfterVoidInspect(strAlignCsv, strDieNo,
+      bVoidGood ? "GOOD" : "NG");
+  if (!bVoidGood)
+  {
+      // 알람 / Unload / Manual Remove / Retry 팝업
+  }
 
 
 ============================================================

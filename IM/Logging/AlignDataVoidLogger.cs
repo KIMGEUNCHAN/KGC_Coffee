@@ -8,23 +8,32 @@ namespace IM.Logging
     /// <summary>
     /// AlignData.csv 에 Void Good/NG 를 남길 때 쓰는 안전한 쪽.
     ///
+    /// 현장 모순
+    ///   if (bGood) SaveAlignData();
+    ///   NG 이면 파일을 안 남기므로 csv 에는 Good 만 있다.
+    ///   AlignData 에서 NG 와 Good 을 보려면 판정과 무관하게 저장한다.
+    ///
+    ///   AlignDataVoidLogger.SaveAfterVoidInspect(path, "1", "NG");
+    ///   AlignDataVoidLogger.SaveAfterVoidInspect(path, "1", "GOOD");
+    ///
     /// 하지 말 것
-    ///   FileMode.Create 로 AlignData 를 새로 만들기
-    ///   GOOD/NG 를 새 행으로 Append
+    ///   if (bGood) 안에서만 SaveAlignData 호출
+    ///   GOOD/NG 를 새 정렬 행으로 Append
     ///   OffsetX/Y, Score, Align Result 칸을 Void 값으로 덮기
     ///
     /// 할 것
+    ///   SaveAlignData 를 NG 팝업보다 먼저, Good/NG 모두에서 호출
     ///   기존 행을 유지하고 맨 끝 열 VoidResult 만 갱신
-    ///   값은 GOOD 또는 NG
-    ///
-    ///   AlignDataVoidLogger.WriteDieResult(path, "1", "NG");
-    ///   AlignDataVoidLogger.WriteWaferResult(path, "GOOD");
     /// </summary>
     public static class AlignDataVoidLogger
     {
         public const string VoidColumn = "VoidResult";
         public const string Good = "GOOD";
         public const string Ng = "NG";
+        public static readonly string[] DefaultHeader = new string[]
+        {
+            "No", "PosX", "PosY", "OffsetX", "OffsetY", "Score", "Result", VoidColumn
+        };
 
         static readonly object objLock = new object();
 
@@ -44,6 +53,49 @@ namespace IM.Logging
                 return Ng;
             }
             return str;
+        }
+
+        /// <summary>
+        /// Good 이든 NG 든 AlignData.csv 를 저장해야 한다.
+        /// NG 에서 false 를 반환하는 가드가 모순의 원인이다.
+        /// </summary>
+        public static bool MustSaveAlignData(string judge)
+        {
+            string str = NormalizeJudge(judge);
+            return str == Good || str == Ng;
+        }
+
+        /// <summary>
+        /// Void 판정 직후 호출. NG 팝업 / Unload 보다 먼저.
+        /// 파일이 없어도 NG 를 남겨서 Good 만 남는 모순을 없앤다.
+        /// 메모리에 Align 행이 있으면 header/rows 를 넘겨 오프셋도 같이 남긴다.
+        /// </summary>
+        public static void SaveAfterVoidInspect(string csvPath, string dieKey, string judge)
+        {
+            SaveAfterVoidInspect(csvPath, dieKey, judge, null, null);
+        }
+
+        public static void SaveAfterVoidInspect(string csvPath, string dieKey, string judge, string[] header, string[][] rows)
+        {
+            if (csvPath == null || csvPath == "")
+            {
+                throw new ArgumentException("csvPath");
+            }
+            if (!MustSaveAlignData(judge))
+            {
+                throw new ArgumentException("judge must be GOOD or NG");
+            }
+
+            lock (objLock)
+            {
+                if (File.Exists(csvPath) && new FileInfo(csvPath).Length > 0)
+                {
+                    WriteDieResultLocked(csvPath, dieKey, judge, 0);
+                    return;
+                }
+                CsvTable table = CsvTable.FromSnapshot(header, rows, dieKey, NormalizeJudge(judge));
+                table.Save(csvPath);
+            }
         }
 
         public static void WriteDieResult(string csvPath, string dieKey, string judge)
@@ -70,31 +122,37 @@ namespace IM.Logging
 
             lock (objLock)
             {
-                CsvTable table = CsvTable.Load(csvPath);
-                table.EnsureVoidColumn();
-                int nKey = table.FindKeyColumn(keyColumnIndex);
-                int nVoid = table.VoidColumnIndex();
-                bool bHit = false;
-                int i;
-                for (i = 0; i < table.Rows.Length; i++)
-                {
-                    string[] arr = table.Rows[i];
-                    if (arr.Length <= nKey)
-                    {
-                        continue;
-                    }
-                    if (string.Compare(arr[nKey].Trim(), dieKey.Trim(), true) == 0)
-                    {
-                        table.SetCell(i, nVoid, strJudge);
-                        bHit = true;
-                    }
-                }
-                if (!bHit)
-                {
-                    throw new InvalidOperationException("AlignData row not found for die " + dieKey + ". Do not append a new align row.");
-                }
-                table.Save(csvPath);
+                WriteDieResultLocked(csvPath, dieKey, strJudge, keyColumnIndex);
             }
+        }
+
+        static void WriteDieResultLocked(string csvPath, string dieKey, string judge, int keyColumnIndex)
+        {
+            string strJudge = NormalizeJudge(judge);
+            CsvTable table = CsvTable.Load(csvPath);
+            table.EnsureVoidColumn();
+            int nKey = table.FindKeyColumn(keyColumnIndex);
+            int nVoid = table.VoidColumnIndex();
+            bool bHit = false;
+            int i;
+            for (i = 0; i < table.Rows.Length; i++)
+            {
+                string[] arr = table.Rows[i];
+                if (arr.Length <= nKey)
+                {
+                    continue;
+                }
+                if (string.Compare(arr[nKey].Trim(), dieKey.Trim(), true) == 0)
+                {
+                    table.SetCell(i, nVoid, strJudge);
+                    bHit = true;
+                }
+            }
+            if (!bHit)
+            {
+                throw new InvalidOperationException("AlignData row not found for die " + dieKey + ". Do not append a new align row.");
+            }
+            table.Save(csvPath);
         }
 
         public static void WriteWaferResult(string csvPath, string judge)
@@ -128,6 +186,66 @@ namespace IM.Logging
             public string[] Header;
             public string[][] Rows;
             public bool HasHeader;
+
+            public static CsvTable FromSnapshot(string[] header, string[][] rows, string dieKey, string judge)
+            {
+                CsvTable table = new CsvTable();
+                if (header != null && header.Length > 0)
+                {
+                    table.HasHeader = true;
+                    table.Header = (string[])header.Clone();
+                }
+                else
+                {
+                    table.HasHeader = true;
+                    table.Header = (string[])AlignDataVoidLogger.DefaultHeader.Clone();
+                }
+
+                if (rows != null && rows.Length > 0)
+                {
+                    table.Rows = new string[rows.Length][];
+                    int r;
+                    for (r = 0; r < rows.Length; r++)
+                    {
+                        table.Rows[r] = (string[])rows[r].Clone();
+                    }
+                }
+                else
+                {
+                    string[] arrRow = new string[table.Header.Length];
+                    int c;
+                    for (c = 0; c < arrRow.Length; c++)
+                    {
+                        arrRow[c] = "";
+                    }
+                    arrRow[0] = dieKey == null ? "" : dieKey;
+                    table.Rows = new string[][] { arrRow };
+                }
+
+                table.EnsureVoidColumn();
+                int nKey = table.FindKeyColumn(0);
+                int nVoid = table.VoidColumnIndex();
+                bool bHit = false;
+                int i;
+                for (i = 0; i < table.Rows.Length; i++)
+                {
+                    if (table.Rows[i].Length > nKey &&
+                        string.Compare(table.Rows[i][nKey].Trim(), (dieKey == null ? "" : dieKey).Trim(), true) == 0)
+                    {
+                        table.SetCell(i, nVoid, judge);
+                        bHit = true;
+                    }
+                }
+                if (!bHit && table.Rows.Length > 0)
+                {
+                    table.SetCell(0, nVoid, judge);
+                    if (table.Rows[0].Length > nKey)
+                    {
+                        table.Rows[0][nKey] = dieKey == null ? "" : dieKey;
+                    }
+                }
+                return table;
+            }
 
             public static CsvTable Load(string path)
             {

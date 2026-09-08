@@ -1,9 +1,14 @@
-"""Safe Void GOOD/NG updates for AlignData.csv.
+"""Always save AlignData.csv for Void GOOD and NG.
 
-AlignData.csv is an alignment-offset contract file.
-Do not FileMode.Create it from the void path, do not append extra
-align rows, and do not write GOOD/NG into OffsetX/Y.
-Only refresh a trailing VoidResult column on existing rows.
+Shop-floor bug:
+    if good:
+        save AlignData.csv
+    # NG skips save, so the csv only ever contains GOOD.
+
+SaveAfterVoidInspect writes GOOD and NG. Call it before the NG popup.
+If the csv is missing (because the Good-only guard skipped it), still
+create the file so NG is visible. Pass in-memory align rows when you
+have them so offsets are not lost on NG.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ from pathlib import Path
 VOID_COLUMN = "VoidResult"
 GOOD = "GOOD"
 NG = "NG"
+DEFAULT_HEADER = ["No", "PosX", "PosY", "OffsetX", "OffsetY", "Score", "Result", VOID_COLUMN]
 _lock = threading.Lock()
 
 
@@ -27,24 +33,51 @@ def normalize_judge(judge: str | None) -> str:
     return text
 
 
+def must_save_align_data(judge: str | None) -> bool:
+    """NG must save too. A Good-only guard is the contradiction."""
+    return normalize_judge(judge) in {GOOD, NG}
+
+
+def save_after_void_inspect(
+    csv_path: str | os.PathLike[str],
+    die_key: str,
+    judge: str,
+    header: list[str] | None = None,
+    rows: list[list[str]] | None = None,
+) -> None:
+    """Persist Void GOOD/NG before the NG popup. Never skip save on NG."""
+    path = str(csv_path)
+    verdict = _require_judge(judge)
+    with _lock:
+        if os.path.isfile(path) and os.path.getsize(path) > 0:
+            _write_die_result_locked(path, die_key, verdict, 0)
+            return
+        table = _from_snapshot(header, rows, die_key, verdict)
+        table.save(path)
+
+
 def write_die_result(csv_path: str | os.PathLike[str], die_key: str, judge: str, key_column_index: int = 0) -> None:
     path = str(csv_path)
     verdict = _require_judge(judge)
     with _lock:
-        table = _load(path)
-        table.ensure_void_column()
-        key_col = table.find_key_column(key_column_index)
-        void_col = table.void_column_index()
-        hit = False
-        for row in table.rows:
-            if len(row) > key_col and row[key_col].strip().lower() == str(die_key).strip().lower():
-                table.set_cell(row, void_col, verdict)
-                hit = True
-        if not hit:
-            raise LookupError(
-                f"AlignData row not found for die {die_key}. Do not append a new align row."
-            )
-        table.save(path)
+        _write_die_result_locked(path, die_key, verdict, key_column_index)
+
+
+def _write_die_result_locked(path: str, die_key: str, verdict: str, key_column_index: int) -> None:
+    table = _load(path)
+    table.ensure_void_column()
+    key_col = table.find_key_column(key_column_index)
+    void_col = table.void_column_index()
+    hit = False
+    for row in table.rows:
+        if len(row) > key_col and row[key_col].strip().lower() == str(die_key).strip().lower():
+            table.set_cell(row, void_col, verdict)
+            hit = True
+    if not hit:
+        raise LookupError(
+            f"AlignData row not found for die {die_key}. Do not append a new align row."
+        )
+    table.save(path)
 
 
 def write_wafer_result(csv_path: str | os.PathLike[str], judge: str) -> None:
@@ -130,6 +163,32 @@ def _load(path: str) -> _CsvTable:
     start = 1 if has_header else 0
     rows = [line.split(",") for line in lines[start:]]
     return _CsvTable(header, rows, has_header)
+
+
+def _from_snapshot(
+    header: list[str] | None,
+    rows: list[list[str]] | None,
+    die_key: str,
+    verdict: str,
+) -> _CsvTable:
+    use_header = list(header) if header else list(DEFAULT_HEADER)
+    table = _CsvTable(use_header, [list(row) for row in rows] if rows else [], True)
+    if not table.rows:
+        table.rows = [[""] * len(table.header)]
+        table.rows[0][0] = str(die_key)
+    table.ensure_void_column()
+    key_col = table.find_key_column(0)
+    void_col = table.void_column_index()
+    hit = False
+    for row in table.rows:
+        if len(row) > key_col and row[key_col].strip().lower() == str(die_key).strip().lower():
+            table.set_cell(row, void_col, verdict)
+            hit = True
+    if not hit and table.rows:
+        table.set_cell(table.rows[0], void_col, verdict)
+        if len(table.rows[0]) > key_col:
+            table.rows[0][key_col] = str(die_key)
+    return table
 
 
 def _looks_like_header(cells: list[str]) -> bool:
