@@ -1,0 +1,66 @@
+﻿적용방법.txt
+WISVision IM Edge Profiling NG 복구 팝업 로그 로직
+작성: 2026-09-08
+
+자세한 분기 설명은 같은 폴더의
+  EdgeProfiling_NG_로그로직.txt
+를 본다.
+
+
+============================================================
+1. 이 패킷이 하는 일
+============================================================
+
+Edge Profiling NG 시 Unload / Manual Remove / Retry 팝업에서
+각 버튼이 로그를 어떻게 남기는지 정리한다.
+
+Unload        → Inspect 로그 + 상위 IM Inspection Error
+Manual Remove → Inspect 로그만 (Inspection Error 없음)
+Retry         → Inspect 로그 Count=N (Inspection Error 없음, 재검사)
+
+현장 IM 전체 소스는 이 zip 에 없다.
+현장 VS 에서 "Manual Remove" 로 팝업 분기를 찾은 뒤
+아래 C# 호출과 대조한다.
+
+
+============================================================
+2. 가져갈 파일
+============================================================
+
+  현장적용\EdgeProfiling_NG_로그로직.txt
+  IM\Logging\EdgeProfilingNgRecovery.cs
+  IM\Logging\clsLog.cs   (이미 LotBoundary 때 넣었으면 다시 넣지 말 것)
+
+
+============================================================
+3. 현장 소스에 넣을 위치
+============================================================
+
+Edge Profiling NG 직후 (알람 + 복구 팝업 뜨기 전)
+
+  EdgeProfilingNgRecovery.OnEdgeProfilingNg();
+
+복구 팝업 버튼 핸들러
+
+  Unload          → EdgeProfilingNgRecovery.OnUnload();
+                    이어서 기존 IM Inspection Error / 로봇 언로드
+
+  Manual Remove   → EdgeProfilingNgRecovery.OnManualRemove();
+                    웨이퍼 직접 제거. Inspection Error 호출하지 말 것
+
+  Retry           → EdgeProfilingNgRecovery.OnRetry(nRetry);
+                    같은 웨이퍼로 Edge Profiling 재진입
+
+이미 WriteLog 가 있으면 중복하지 말고 로그만 대조한다.
+
+
+============================================================
+4. 확인
+============================================================
+
+C:\WISVision\Log\Inspect_LAST.txt
+C:\WISVision\Log\Alarm_LAST.txt
+
+Unload 후 Alarm_LAST 에 IM Inspection Error
+Manual Remove / Retry 후 Alarm_LAST 에 IM Inspection Error 가 없어야 한다.
+끝.
