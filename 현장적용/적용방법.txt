@@ -1,0 +1,97 @@
+적용방법.txt
+WISVision IM 0910 load/unload buzzer3
+작성: 2026-09-21
+
+자세한 원인
+  같은 폴더 LoadUnload_Buzzer3_원인.txt
+
+
+============================================================
+1. 이 패킷이 하는 일
+============================================================
+
+0910 원본은 이 zip 에 없다.
+load/unload seq 의 진공 delay wafer check 가
+setBuzzer / buzzer3 를 뒤집는 모양인지 현장에서 찾고
+고정 Sleep+1회 체크를 Wait 로 바꾸기 위한 드롭인이다.
+
+
+============================================================
+2. 가져갈 파일
+============================================================
+
+  현장적용\LoadUnload_Buzzer3_원인.txt
+  IM\Seq\VacWaferBuzzer.cs
+
+
+============================================================
+3. 현장 VS 에서 먼저 찾을 것
+============================================================
+
+솔루션에서 SetBuzzer, setBuzzer, Buzzer3, CheckWafer,
+VacDelay, SetVacuum, LoadSeq, UnloadSeq 검색.
+
+아래가 한 함수 안에 있으면 그 함수가 본체다.
+
+  Sleep(nVacDelay) 또는 Delay(Vac)
+  CheckWafer / bWafer
+  setBuzzer = ...
+  SetBuzzer(3, ...)
+
+
+============================================================
+4. 바꿀 위치
+============================================================
+
+현재 (의심)
+
+  SetVacuum(bLoad);
+  Thread.Sleep(nVacDelay);
+  setBuzzer = !CheckWafer();
+  SetBuzzer(3, setBuzzer);
+
+수정
+
+  bool bOk = VacWaferBuzzer.RunVacThenCheck(
+      SetVacuum, CheckWafer, bLoad, nVacTimeout, 20);
+  VacWaferBuzzer.PulseBuzzer3(SetBuzzer3, bNotifyBuzzer, nBuzzerMs);
+  if (!bOk)
+  {
+      // 기존 wafer alarm 경로
+  }
+
+SetVacuum / CheckWafer / SetBuzzer3 이름은
+현장 함수명에 맞춰 람다로 바꿔 넣는다.
+
+  VacWaferBuzzer.RunVacThenCheck(
+      delegate(bool bOn) { IO.SetVac(bOn); },
+      delegate() { return IO.Wafer(); },
+      bLoad,
+      nVacTimeout,
+      20);
+
+
+============================================================
+5. nVacTimeout
+============================================================
+
+기존 nVacDelay 의 2~3 배를 타임아웃으로 두고
+실제 대기는 센서가 먼저 오면 끝낸다.
+한 호기만 느리면 그 호기 INI/레시피에만 timeout 을 키운다.
+전 호기 공통 Sleep 을 키우지 않는다.
+
+
+============================================================
+6. 확인
+============================================================
+
+문제 호기에서 load / unload 를 여러 장.
+
+맞으면
+  load 에서 buzzer3 가 센서 미싱 때문에 켜져 있지 않다
+  unload 에서 buzzer3 가 꺼진 채로 남는 것이 알림 펄스 끝이다
+  timeout 로그가 없어야 한다
+
+아직
+  Seq=Load  Wafer=0 setBuzzer=1 Buzzer3=1
+  가 남으면 Sleep+!CheckWafer 줄이 남아 있는 것이다.

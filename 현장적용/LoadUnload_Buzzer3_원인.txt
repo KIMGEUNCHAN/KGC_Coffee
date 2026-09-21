@@ -1,0 +1,208 @@
+WISVision IM — 0910 load/unload setBuzzer / buzzer3
+진공 delay wafer check 의심
+
+작성: 2026-09-21
+대상: 현장 0910 IM 유닛 Visual Studio 프로젝트
+이 GitHub(KGC_Coffee) 에는 0910 전체 소스가 없다.
+아래 식별자 이름은 현장 소스에 그대로 있을 수도 있고
+검색용 별칭일 수도 있다.
+
+
+============================================================
+0. 한 줄 결론
+============================================================
+
+의심이 맞다.
+load / unload seq 에서 setBuzzer 가 true 로 되는 지점은
+진공 지령 후 고정 delay 한 다음 wafer check 를 한 번만
+읽는 곳이다.
+
+한 호기만 간헐적으로
+  load   → buzzer3 켜짐
+  unload → buzzer3 꺼짐
+인 이유는 buzzer3 가 "알림 펄스"가 아니라
+  setBuzzer = !CheckWafer()
+  SetBuzzer(3, setBuzzer)
+처럼 웨이퍼 미싱 비트에 묶여 있기 때문이다.
+
+그 호기는 진공 settle 이 nVacDelay 보다 길다.
+delay 끝나는 순간 센서가 아직 이전 상태다.
+
+  load  : Vac ON 직후 센서 아직 OFF → setBuzzer true  → buzzer3 ON
+  unload: Vac OFF 직후 센서 아직 ON  → setBuzzer false → buzzer3 OFF
+
+다른 호기는 같은 delay 안에 센서가 따라가서
+이 패턴이 안 보이거나 반대로 보인다.
+
+
+============================================================
+1. 증상 재구성
+============================================================
+
+사용자
+  0910 코드
+  setBuzzer 가 true 로 되는 부분
+  load 및 unload seq 를 타는 부분
+  vacuum 쪽 delay 의 wafer check 가 의심
+  설비 중 한 호기, 간헐
+  load 시 buzzer3 켜지고
+  unload 시 buzzer3 꺼지고
+
+이 네 가지가 동시에 맞으려면
+"부저 옵션이 true 라서 양쪽 다 울린다"는 설명이 안 된다.
+양쪽 다 SetBuzzer(3, true) 면 unload 에서도 켜져야 한다.
+
+unload 에서 꺼진다는 것 자체가
+SetBuzzer(3, setBuzzer) 의 setBuzzer 값이
+load / unload 에서 반대로 나온다는 뜻이다.
+
+
+============================================================
+2. 0910 에서 찾을 코드 모양
+============================================================
+
+가장 잘 맞는 식
+
+  SetVacuum(bLoad);                 // load ON, unload OFF
+  Thread.Sleep(nVacDelay);          // 고정 대기
+  setBuzzer = !CheckWafer();        // 센서 1회
+  SetBuzzer(3, setBuzzer);
+
+비슷한 변형 (이름만 다를 수 있음)
+
+  bVac = true / false;
+  Delay(VacDelay);
+  bWafer = IO.In.Wafer;
+  bSetBuzzer = !bWafer;
+  IO.Out.Buzzer3 = bSetBuzzer;
+
+  setBuzzer = (CheckWafer() == false);
+  Buzzer(3, setBuzzer);
+
+  if (setBuzzer)
+      SetBuzzer(3, !bWaferExist);
+
+현장 VS 검색 키워드
+
+  SetBuzzer
+  setBuzzer
+  setbuzzer
+  Buzzer3
+  buzzer3
+  CheckWafer
+  bWafer
+  WaferCheck
+  SetVacuum
+  VacDelay
+  nVacDelay
+  nVacTime
+  Sleep
+  LoadSeq
+  UnloadSeq
+  SeqLoad
+  SeqUnload
+
+
+============================================================
+3. 왜 한 호기, 왜 간헐인가
+============================================================
+
+코드가 호기마다 다르면 매 장마다 동일하게 재현된다.
+한 호기 + 간헐 이면 하드웨어 타이밍이다.
+
+그 호기에서 길어질 수 있는 것
+  진공 펌프 도달 시간
+  배관 길이 / 필터 막힘
+  척 리크
+  진공 센서 문턱
+  웨이퍼 휨, 두께, 이면 이물
+  공압 헤더 압력이 다른 호기보다 낮음
+
+nVacDelay 는 전 호기 공통 값으로 두고
+그 호기만 settle 이 delay 근처에서 출렁인다.
+그래서 어떤 장은 센서가 따라가고, 어떤 장은 한 박자 늦다.
+
+
+============================================================
+4. 타임라인
+============================================================
+
+고정 delay = 200ms 라고 가정.
+느린 호기 settle = 500ms.
+
+LOAD
+  t=0     Vac ON, 센서 아직 OFF
+  t=200   Sleep 끝, CheckWafer=false
+          setBuzzer=true
+          buzzer3 ON          ← 현장에서 보는 것
+  t=500   이제야 센서 ON (이미 부저는 켜진 뒤)
+
+UNLOAD
+  t=0     Vac OFF, 센서 아직 ON (잔압)
+  t=200   Sleep 끝, CheckWafer=true
+          setBuzzer=false
+          buzzer3 OFF         ← 현장에서 보는 것
+  t=500   이제야 센서 OFF
+
+
+============================================================
+5. 잘못된 수정 / 맞는 수정
+============================================================
+
+하지 말 것
+  Sleep 숫자만 조금 키우고 끝. 그 호기가 더 느려지면 다시 터진다.
+  setBuzzer 와 CheckWafer 를 같은 줄에 남겨 둔 채 delay 만 늘리기.
+  load 에서만 부저를 끄고 unload 는 그대로 두기.
+
+할 것
+  1) 진공 지령 후 센서가 기대값이 될 때까지 폴링.
+     load 기대값 = wafer present
+     unload 기대값 = wafer absent
+     timeout 시에만 알람.
+  2) 작업자 알림(setBuzzer 옵션)은 따로 Pulse.
+     켠 다음 nBuzzerMs 후 반드시 끈다.
+     CheckWafer 결과를 SetBuzzer(3, ...)에 넣지 않는다.
+  3) 그 호기 VacTimeout 을 레시피/호기 파라미터로 분리.
+  4) 한 줄 로그를 남겨 delay 부족인지 확인.
+     Vac=ON/OFF CheckWafer= waitMs= setBuzzer= Buzzer3=
+
+
+============================================================
+6. 현장 로그로 한 번에 판정
+============================================================
+
+C:\WISVision\Log\Inspect_LAST.txt 또는 System_LAST.txt
+아래를 Sleep 직후, SetBuzzer 직전에 찍는다.
+
+  Seq=Load  Vac=ON  Wafer=0  Delay=200  setBuzzer=1  Buzzer3=1
+  Seq=Unload Vac=OFF Wafer=1  Delay=200  setBuzzer=0  Buzzer3=0
+
+이 두 줄이 같이 나오면 이번 분석이 맞다.
+Wafer 가 이미 기대값인데도 부저가 묶이면 IO 맵 문제 쪽을 본다.
+
+
+============================================================
+7. IO 맵 2순위
+============================================================
+
+타이밍이 아닌데 매 장마다 load ON / unload OFF 면
+Buzzer3 비트와 Vacuum/Wafer 비트가 한 호기에서만
+잘못 물렸을 수 있다. 그때는 코드 delay 가 아니라
+IO 할당을 대조한다. 간헐이면 1순위는 delay 다.
+
+
+============================================================
+8. 대조용 호출
+============================================================
+
+  bool bOk = VacWaferBuzzer.RunVacThenCheck(
+      SetVacuum, CheckWafer, bLoad, nVacTimeout, 20);
+
+  VacWaferBuzzer.PulseBuzzer3(SetBuzzer3, bNotifyBuzzer, nBuzzerMs);
+
+  if (!bOk)
+  {
+      clsLog.WriteLog("Inspect",
+          "VacWafer timeout Load=" + bLoad.ToString()
+          + " Wafer=" + CheckWafer().ToString());
+  }
