@@ -11,6 +11,8 @@ import {
   dividendThrough,
   emptyMonth,
   isMonthEmpty,
+  BALANCE_KEYS,
+  balanceFilled,
   monthHasMark,
   monthLabel,
   parseKey,
@@ -191,15 +193,9 @@ export function App() {
           previous={previous?.assets ?? null}
           dividendWon={dividendThrough(store, month)}
           series={yearSeries(store, parsed.year, (item) =>
-            sumKeys(item.assets, [
-              "pensionIndex",
-              "pensionSemi",
-              "tossDividendStock",
-              "tossSingle",
-              "tossIndex",
-              "isaIndex",
-              "isaSemi",
-            ]),
+            balanceFilled(item.assets) === BALANCE_KEYS.length
+              ? sumKeys(item.assets, BALANCE_KEYS)
+              : null,
           )}
           onChange={(assets) => patchMonth((current) => ({ ...current, assets }))}
         />

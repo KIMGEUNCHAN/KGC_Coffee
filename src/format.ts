@@ -70,10 +70,13 @@ export function formatKg(kg: number): string {
 }
 
 export function moneyDeltaPhrase(deltaWon: number, partial: boolean): string {
-  const scope = partial ? "양쪽에 모두 적은 항목만, " : "";
-  if (deltaWon === 0) return `${scope}지난달과 같습니다`;
   const word = deltaWon > 0 ? "늘었습니다" : "줄었습니다";
-  return `${scope}지난달보다 ${formatWon(Math.abs(deltaWon))} ${word}`;
+  if (partial) {
+    if (deltaWon === 0) return "일부만 적었고, 그 항목은 지난달과 같습니다";
+    return `일부만 적었습니다. 그 항목은 지난달보다 ${formatWon(Math.abs(deltaWon))} ${word}`;
+  }
+  if (deltaWon === 0) return "지난달과 같습니다";
+  return `지난달보다 ${formatWon(Math.abs(deltaWon))} ${word}`;
 }
 
 export function weightDeltaPhrase(current: number, previous: number): string {

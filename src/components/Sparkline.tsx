@@ -1,4 +1,4 @@
-import type { SeriesPoint } from "../model";
+import { endpoints, type SeriesPoint } from "../model";
 
 export function Sparkline({
   points,
@@ -14,17 +14,27 @@ export function Sparkline({
   const known = points.filter((point) => point.value != null);
   if (known.length < 2) return null;
 
+  const first = points.findIndex((point) => point.value != null);
+  let last = -1;
+  for (let index = points.length - 1; index >= 0; index -= 1) {
+    if (points[index]?.value != null) {
+      last = index;
+      break;
+    }
+  }
+  const windowed = points.slice(first, last + 1);
+
   const width = 640;
   const height = 78;
-  const pad = 8;
+  const pad = 10;
   const values = known.map((point) => point.value as number);
   const min = Math.min(...values);
   const max = Math.max(...values);
   const span = max - min || 1;
 
-  const coords = points.map((point, index) => {
+  const coords = windowed.map((point, index) => {
     if (point.value == null) return null;
-    const x = pad + (index * (width - pad * 2)) / Math.max(points.length - 1, 1);
+    const x = pad + (index * (width - pad * 2)) / Math.max(windowed.length - 1, 1);
     const y = pad + (1 - (point.value - min) / span) * (height - pad * 2);
     return { ...point, x, y, value: point.value };
   });
@@ -66,5 +76,24 @@ export function Sparkline({
         )}
       </svg>
     </figure>
+  );
+}
+
+export function SeriesNote({
+  year,
+  points,
+  formatValue,
+}: {
+  year: number;
+  points: SeriesPoint[];
+  formatValue: (value: number) => string;
+}) {
+  const span = endpoints(points);
+  if (!span || span.start.value == null || span.end.value == null) return null;
+  return (
+    <p className="span">
+      {year}년 {span.start.label} {formatValue(span.start.value)}에서 {span.end.label}{" "}
+      {formatValue(span.end.value)}
+    </p>
   );
 }

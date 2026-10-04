@@ -1,8 +1,7 @@
 import { formatKg, weightDeltaPhrase } from "../format";
 import type { SeriesPoint } from "../model";
-import { endpoints } from "../model";
 import { NumericField } from "./NumericField";
-import { Sparkline } from "./Sparkline";
+import { SeriesNote, Sparkline } from "./Sparkline";
 
 export function WeightSection({
   month,
@@ -19,8 +18,6 @@ export function WeightSection({
   series: SeriesPoint[];
   onChange: (weight: number | null) => void;
 }) {
-  const span = endpoints(series);
-
   return (
     <section id="weight" aria-labelledby="weight-title">
       <header className="sec-h">
@@ -41,11 +38,7 @@ export function WeightSection({
       />
       {weight != null && previous != null ? <p className="delta flat">{weightDeltaPhrase(weight, previous)}</p> : null}
       <Sparkline points={series} activeKey={month} formatValue={formatKg} label={`${year}년 아침 몸무게`} />
-      {span && span.start.value != null && span.end.value != null ? (
-        <p className="span">
-          {year}년 {span.start.label} {formatKg(span.start.value)}에서 {span.end.label} {formatKg(span.end.value)}
-        </p>
-      ) : null}
+      <SeriesNote year={year} points={series} formatValue={formatKg} />
     </section>
   );
 }

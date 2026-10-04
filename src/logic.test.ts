@@ -62,7 +62,7 @@ describe("금액", () => {
     const current = { ...emptyAssets(), pensionIndex: 100, pensionSemi: null };
     const previous = { ...emptyAssets(), pensionIndex: 80, pensionSemi: 10, tossDividendIncome: 50 };
     expect(compareBalances(current, previous)).toEqual({ delta: 20, partial: true });
-    expect(moneyDeltaPhrase(20, true)).toContain("양쪽에 모두 적은 항목만");
+    expect(moneyDeltaPhrase(20, true)).toContain("일부만 적었습니다");
     expect(compareBalances(emptyAssets(), emptyAssets())).toBeNull();
   });
 });

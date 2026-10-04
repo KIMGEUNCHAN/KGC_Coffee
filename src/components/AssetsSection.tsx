@@ -9,7 +9,7 @@ import {
   sumKeys,
 } from "../model";
 import { NumericField } from "./NumericField";
-import { Sparkline } from "./Sparkline";
+import { SeriesNote, Sparkline } from "./Sparkline";
 
 export function AssetsSection({
   month,
@@ -109,6 +109,7 @@ export function AssetsSection({
         ) : null}
 
         <Sparkline points={series} activeKey={month} formatValue={formatWon} label={`${year}년 평가액`} />
+        <SeriesNote year={year} points={series} formatValue={formatWon} />
       </div>
 
       {ACCOUNTS.map((account) => {
